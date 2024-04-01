@@ -72,7 +72,6 @@ def plan(state:ControlState, account, roles_to_plan, from_cache = True, method =
 
 def plan_single_role(state:ControlState, objects,role_grants,profiles,role,role_config):
     target_state_grants = set()
-    shared_databases = set(objects['shared database']['name'])
     associated_profiles = role_config['profiles']
 
 
