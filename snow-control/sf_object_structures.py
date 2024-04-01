@@ -14,7 +14,7 @@ DETAILED_OBJECT_TYPE_MAPPER = {
     'notification integration': 'integration'
 }
 
-ALOs = ['warehouse','database','storage integration','notification integration','api integration']
+ALOs = ['warehouse','database','storage integration','notification integration','api integration','role','user']
 ALO_FULL_NAME = ['name']
 NLOs = ['table','dynamic table','view','stage','pipe','task','stream',
         'tag',
