@@ -117,9 +117,9 @@ def save_cache(st:ControlState, objects:dict[str,pd.DataFrame]):
             {
                'local_cached_time': strftime("%Y-%m-%d %H:%M:%S",localtime()),
                'objects':{
-                   obj_typ:{row.FULL_NAME: row for row in rows}
+                   obj_typ:{row.FULL_NAME: row._asdict() for row in rows}
                    for obj_typ,rows in objects.items()
                }
-            }, indent = 4
+            }, indent = 4, default=lambda _: '<not serializable>'
         )
         )
