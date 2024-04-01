@@ -119,15 +119,12 @@ def menu_screen(st:ControlState) -> bool:
     elif response == 'get':
         print('\n')
         st.print(f'Getting latest list of objects in account {Style.BRIGHT + Fore.YELLOW}{st.account}')
-        objects = object_scan(
+        objects,current_state = object_scan(
             st,
             method = 'seq' if method_sequential else 'conc'
         )
-        filtered = filter_objects(
-            st, objects,method ='seq' if method_sequential else 'conc'
-        )
         save_cache(
-            st,filtered
+            st,objects,current_state
         )
     elif response == 'plan':
         roles_string = cli_input('Enter the roles you wish to generate the plan for , separated by a space (default ALL)')

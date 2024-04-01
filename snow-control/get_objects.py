@@ -202,10 +202,8 @@ def save_cache(st:ControlState, objects:dict[str,pd.DataFrame],current_state:dic
                    obj_typ:{row.FULL_NAME: row._asdict() for row in rows}
                    for obj_typ,rows in objects.items()
                },
-               'current_state':{
-                   'roles':{},
-                   'users':{}
-               }
+               'current_state':current_state
+               
             }, indent = 4, default=lambda _: '<not serializable>'
         )
         )
