@@ -10,12 +10,17 @@ from time import localtime,strftime
 from control_state import ControlState
 from itertools import repeat
 
+ALL_OBJECT_TYPES = set(ATOMIC_GROUPS.keys()).union(set(DETAILED_OBJECT_TYPE_MAPPER.values()))
+UNSUPPORTED_PRIVS = get_unsupported_privs()
+
 
 @time_func
 def object_scan(state:ControlState, method = 'conc') -> dict:
     objects = {}
+    grants = {'roles':{},'users':{}}
     conn = state.connection
     tp_executor = state.executor
+    
     def individual_object_scan(item: Tuple[str,list[str]]):
         obj_type, key = item
         cur = conn.cursor()
@@ -40,16 +45,86 @@ def object_scan(state:ControlState, method = 'conc') -> dict:
         
         return (obj_type,list(panda.itertuples()))
 
+    def get_grants_to_role(role:str) -> set:
+        current_state_grants = get_current_grants_to_role(role) | get_future_grants_to_role(role)
+
+        filter_fn = lambda db: db not in objects['shared database']
+        current_state_grants = {
+            (priv,typ,full_name)
+            for priv,typ,full_name in current_state_grants
+            if filter_fn(full_name.split('.')[0])
+            and not object_matches_any(full_name,state.ignore_objects)
+            and (priv,typ) not in UNSUPPORTED_PRIVS
+        }
+        return (role,current_state_grants)
+
+    def get_current_grants_to_role(role:str) -> set:
+        cur = state.connection.cursor()
+        state.print(f'Executing show query on role {role}', verbosity_level = 4)
+        cur.execute(f'show grants to role {role}')
+        qid = cur.sfqid
+        
+        state.print(f'Retrieving current grants to role {role}', verbosity_level = 3)
+        results = set(list(cur.execute(
+            CURRENT_GRANTS_TO_ROLE.format(qid = qid)
+        )))
+        return {
+            (
+                priv,
+                DETAILED_OBJECT_TYPE_MAPPER.get(typ.lower(),typ).upper(),
+                process_name(name,typ.upper())
+            )
+            for priv,typ,name in results
+            # Necessary to avoid running into errors with new SF preview objects
+            if typ.lower() in ALL_OBJECT_TYPES
+        }
+
+    def get_future_grants_to_role(role:str) -> set:
+        cur = state.connection.cursor()
+        state.print(f'Executing show future query on role {role}', verbosity_level = 4)
+        cur.execute(f'show future grants to role {role}')
+        qid = cur.sfqid
+
+        state.print(f'Retrieving future grants to role {role}', verbosity_level = 3)
+        results = set(list(cur.execute(
+            FUTURE_GRANTS_TO_ROLE.format(qid = qid)
+        )))
+        return {
+            (
+                priv,
+                f"FUTURE {pluralize(DETAILED_OBJECT_TYPE_MAPPER.get(typ.lower(),typ).upper())} IN {'DATABASE' if typ.lower() == 'schema' else 'SCHEMA'}",
+                process_name(name,'schema')
+            )
+            for priv,typ,name in results
+            # Necessary to avoid running into errors with new SF preview objects
+            if typ.lower() in ALL_OBJECT_TYPES
+        }
+
     if method == 'seq':
+        state.print('Scanning Objects',verbosity_level=3)
         for obj_type,full_name_columns in GET_FULL_NAME.items():
             print(obj_type)
             print(full_name_columns)
             _, result_df = individual_object_scan((obj_type,full_name_columns))
             objects[obj_type] = result_df
+        
+        state.print('Scanning Role:',verbosity_level=3)
+        for role in objects['role']:
+            grants['roles'][role] = get_grants_to_role(role)[1]
+        
     else: 
+        state.print('Scanning Objects',verbosity_level=3)
         results = tp_executor.map(individual_object_scan,GET_FULL_NAME.items())
         for obj_type,result_df in results:
             objects[obj_type] = result_df
+        state.print('Scanning Roles',verbosity_level=3)
+        #ICK #IKC #ICK 
+        results = dict(tp_executor.map(get_grants_to_role,objects['role']))
+        grants['roles'] = results
+
+
+    
+
 
     return objects
 
@@ -110,7 +185,9 @@ def filter_function(obj_type:str, obj_rows:list, ignore_dbs:set, ignore_pattern 
     return obj_type,obj_rows
     
 
-def save_cache(st:ControlState, objects:dict[str,pd.DataFrame]):
+
+
+def save_cache(st:ControlState, objects:dict[str,pd.DataFrame],current_state:dict):
     with open(os.path.join(CONFIG_DIR,'config',st.account,'.snowcache'),'w') as f:
 
         f.write(json.dumps(
@@ -119,6 +196,10 @@ def save_cache(st:ControlState, objects:dict[str,pd.DataFrame]):
                'objects':{
                    obj_typ:{row.FULL_NAME: row._asdict() for row in rows}
                    for obj_typ,rows in objects.items()
+               },
+               'current_state':{
+                   'roles':{},
+                   'users':{}
                }
             }, indent = 4, default=lambda _: '<not serializable>'
         )
