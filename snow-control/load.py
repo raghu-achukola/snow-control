@@ -23,13 +23,13 @@ def clear_cache(account_name:str, files_to_clear = ['.snowcache','.snowplan','.s
         open(os.path.join(CONFIG_DIR,f'config/{account_name}/{file}'),'w').close()
 
 
-def get_objects_from_cache(account:str):
+def load_cache(account:str):
     with open(os.path.join(CONFIG_DIR,f'config/{account}/.snowcache'),'r') as f: 
         retrieved = json.loads(f.read())
         print(f"Retrieving cached record of objects from {Style.BRIGHT + Fore.YELLOW} {retrieved['local_cached_time']} {Style.RESET_ALL} local_time")
-        return {
-            obj_type: pd.DataFrame(value).T.reset_index().rename({'index':'FULL_NAME'}, axis = 'columns')
-            for obj_type, value in retrieved['objects'].items()
+        return retrieved['objects'], {
+           'roles': {role: set(role_grants) for role, role_grants in retrieved['grants']['roles'].items()},
+           'users': {user: set(user_grants) for user, user_grants in retrieved['grants']['users'].items()}
         }
     
 

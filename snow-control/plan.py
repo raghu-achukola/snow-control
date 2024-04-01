@@ -1,5 +1,5 @@
 from load import (
-    get_objects_from_cache,
+    load_cache,
     load_role_configuarations,
     write_out_snowplan,
     get_user_roles_from_config,
@@ -44,13 +44,12 @@ def plan(state:ControlState, account, roles_to_plan, from_cache = True, method =
     PLAN_ID = int(time.time())
     user_configs = get_user_roles_from_config(account=account)
     role_configs, role_profiles = load_role_configuarations(account,roles_to_plan)
-    objects = get_objects_from_cache(account) if from_cache else object_scan(state, method)
-
+    objects,grants = load_cache(account) 
     role_plan, user_plan = {},{}
 
     if method == 'seq':
         for role, config in role_configs.items():
-            role_plan |= plan_single_role(state,objects,role_profiles,role,config)
+            role_plan |= plan_single_role(state,objects,grants['roles'],role_profiles,role,config)
         if plan_users:
             for user, config in user_configs.items():
                 user_plan |= plan_single_user(state,user,config)
@@ -58,7 +57,7 @@ def plan(state:ControlState, account, roles_to_plan, from_cache = True, method =
         role_plans, user_plans = {},{}
         role_plans = state.executor.map(
             plan_single_role,
-            repeat(state),repeat(objects),repeat(role_profiles),*zip(*role_configs.items())
+            repeat(state),repeat(objects),repeat(grants['roles']), repeat(role_profiles),*zip(*role_configs.items())
         )
         if plan_users:
             user_plans = state.executor.map(
@@ -71,7 +70,7 @@ def plan(state:ControlState, account, roles_to_plan, from_cache = True, method =
     write_out_snowplan(account,role_plan,user_plan,plan_id = PLAN_ID)
     # log_snowplan(state,account)
 
-def plan_single_role(state:ControlState, objects,profiles,role,role_config):
+def plan_single_role(state:ControlState, objects,role_grants,profiles,role,role_config):
     target_state_grants = set()
     shared_databases = set(objects['shared database']['name'])
     associated_profiles = role_config['profiles']
@@ -81,16 +80,7 @@ def plan_single_role(state:ControlState, objects,profiles,role,role_config):
         for profile_name, profile_parameters in assoc_prof.items():
             profile_config = profiles[profile_name]
             target_state_grants |= profile_to_grants(state,objects,profile_name,profile_config,**profile_parameters)
-    current_state_grants = get_current_grants_to_role(state,role) | get_future_grants_to_role(state,role)
-
-    filter = lambda db: db not in shared_databases
-    current_state_grants = {
-        (priv,typ,full_name)
-        for priv,typ,full_name in current_state_grants
-        if filter(full_name.split('.')[0])
-        and not object_matches_any(full_name,state.ignore_objects)
-        and (priv,typ) not in UNSUPPORTED_PRIVS
-    }
+    current_state_grants = role_grants.get(role)
     revoke,ok,grant = venn(current_state_grants,target_state_grants)
     return {
         role: {
@@ -164,47 +154,6 @@ def gen_acct_level_grants(account_privilege_profile:dict) -> str:
         for atomic_priv in ATOMIC_GROUPS['account'][atomic_group]
     ]
 
-def get_current_grants_to_role(state,role):
-    cur = state.connection.cursor()
-    state.print(f'Executing show query on role {role}', verbosity_level = 4)
-    cur.execute(f'show grants to role {role}')
-    qid = cur.sfqid
-    
-    state.print(f'Retrieving current grants to role {role}', verbosity_level = 3)
-    results = set(list(cur.execute(
-        CURRENT_GRANTS_TO_ROLE.format(qid = qid)
-    )))
-    return {
-        (
-            priv,
-            DETAILED_OBJECT_TYPE_MAPPER.get(typ.lower(),typ).upper(),
-            process_name(name,typ.upper())
-        )
-        for priv,typ,name in results
-        # Necessary to avoid running into errors with new SF preview objects
-        if typ.lower() in ALL_OBJECT_TYPES
-    }
-
-def get_future_grants_to_role(state,role):
-    cur = state.connection.cursor()
-    state.print(f'Executing show future query on role {role}', verbosity_level = 4)
-    cur.execute(f'show future grants to role {role}')
-    qid = cur.sfqid
-
-    state.print(f'Retrieving future grants to role {role}', verbosity_level = 3)
-    results = set(list(cur.execute(
-        FUTURE_GRANTS_TO_ROLE.format(qid = qid)
-    )))
-    return {
-        (
-            priv,
-            f"FUTURE {pluralize(DETAILED_OBJECT_TYPE_MAPPER.get(typ.lower(),typ).upper())} IN {'DATABASE' if typ.lower() == 'schema' else 'SCHEMA'}",
-            process_name(name,'schema')
-        )
-        for priv,typ,name in results
-        # Necessary to avoid running into errors with new SF preview objects
-        if typ.lower() in ALL_OBJECT_TYPES
-    }
 
 def venn(set1:set, set2:set) -> Tuple[set,set,set]:
     """
