@@ -108,16 +108,21 @@ def object_scan(state:ControlState, method = 'conc') -> dict:
             _, result_df = individual_object_scan((obj_type,full_name_columns))
             objects[obj_type] = result_df
         
-        state.print('Scanning Role:',verbosity_level=3)
-        for role in objects['role']:
-            grants['roles'][role.FULL_NAME] = get_grants_to_role(role.FULL_NAME)[1]
+
         
     else: 
         state.print('Scanning Objects',verbosity_level=3)
         results = tp_executor.map(individual_object_scan,GET_FULL_NAME.items())
         for obj_type,result_df in results:
             objects[obj_type] = result_df
-        state.print('Scanning Roles',verbosity_level=3)
+
+    state.print('Filtering Objects', verbosity_level=3)
+    objects = filter_objects(state,objects,method =method)
+    state.print('Scanning Role:',verbosity_level=3)
+    if method == 'seq':
+        for role in objects['role']:
+            grants['roles'][role.FULL_NAME] = get_grants_to_role(role.FULL_NAME)[1]
+    else:
         #ICK #IKC #ICK 
         results = dict(tp_executor.map(get_grants_to_role,[k.FULL_NAME for k in objects['role']]))
         grants['roles'] = results
