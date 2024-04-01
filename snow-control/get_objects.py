@@ -131,7 +131,7 @@ def object_scan(state:ControlState, method = 'conc') -> dict:
     
 
 
-    return objects
+    return objects, grants
 
 def filter_objects(state:ControlState, objects:dict[str,pd.DataFrame], method:str) -> dict[str,list]:
     dbs = objects['database']
