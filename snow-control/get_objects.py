@@ -133,7 +133,7 @@ def object_scan(state:ControlState, method = 'conc') -> dict:
 
     return objects, grants
 
-def filter_objects(state:ControlState, objects:dict[str,pd.DataFrame], method:str) -> dict[str,list]:
+def filter_objects(state:ControlState, objects:dict[str,list], method:str) -> dict[str,list]:
     dbs = objects['database']
     # Shared Databases
     objects['shared database'] =  [ row for row in dbs if row.kind == 'IMPORTED DATABASE']
@@ -202,7 +202,12 @@ def save_cache(st:ControlState, objects:dict[str,pd.DataFrame],current_state:dic
                    obj_typ:{row.FULL_NAME: row._asdict() for row in rows}
                    for obj_typ,rows in objects.items()
                },
-               'current_state':current_state
+               'current_state':
+               {
+                   'roles':{role: list(privs) for role,privs in current_state['roles'].items()},
+                   'users':{}
+                            
+               }
                
             }, indent = 4, default=lambda _: '<not serializable>'
         )
