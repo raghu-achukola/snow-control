@@ -28,8 +28,8 @@ def load_cache(account:str):
         retrieved = json.loads(f.read())
         print(f"Retrieving cached record of objects from {Style.BRIGHT + Fore.YELLOW} {retrieved['local_cached_time']} {Style.RESET_ALL} local_time")
         return retrieved['objects'], {
-           'roles': {role: set(role_grants) for role, role_grants in retrieved['current_state']['roles'].items()},
-           'users': {user: set(user_grants) for user, user_grants in retrieved['current_state']['users'].items()}
+           'roles': {role: set([tuple(priv) for priv in role_grants]) for role, role_grants in retrieved['current_state']['roles'].items()},
+           'users': {user: set([tuple(priv) for priv in user_grants]) for user, user_grants in retrieved['current_state']['users'].items()}
         }
     
 
