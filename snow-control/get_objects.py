@@ -105,7 +105,7 @@ def filter_function(obj_type:str, obj_rows:list, ignore_dbs:set, ignore_pattern 
         identifier = None
     
     if identifier:
-        filter_fn = lambda row: row.identifier not in ignore_dbs and not re.match(ignore_pattern,row)
+        filter_fn = lambda row: getattr(row,identifier) not in ignore_dbs and not re.match(ignore_pattern,row)
         return obj_type,filter(filter_fn, obj_rows)
     return obj_type,obj_rows
     
