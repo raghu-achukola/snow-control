@@ -110,7 +110,7 @@ def object_scan(state:ControlState, method = 'conc') -> dict:
         
         state.print('Scanning Role:',verbosity_level=3)
         for role in objects['role']:
-            grants['roles'][role] = get_grants_to_role(role)[1]
+            grants['roles'][role.FULL_NAME] = get_grants_to_role(role.FULL_NAME)[1]
         
     else: 
         state.print('Scanning Objects',verbosity_level=3)
@@ -119,7 +119,7 @@ def object_scan(state:ControlState, method = 'conc') -> dict:
             objects[obj_type] = result_df
         state.print('Scanning Roles',verbosity_level=3)
         #ICK #IKC #ICK 
-        results = dict(tp_executor.map(get_grants_to_role,objects['role']))
+        results = dict(tp_executor.map(get_grants_to_role,[k.FULL_NAME for k in objects['role']]))
         grants['roles'] = results
 
 
