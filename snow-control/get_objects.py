@@ -136,27 +136,27 @@ def object_scan(state:ControlState, method = 'conc') -> dict:
 def filter_objects(state:ControlState, objects:dict[str,pd.DataFrame], method:str) -> dict[str,list]:
     dbs = objects['database']
     # Shared Databases
-    objects['shared database'] =  filter(lambda row: row.kind == 'IMPORTED DATABASE', dbs)
+    objects['shared database'] =  [ row for row in dbs if row.kind == 'IMPORTED DATABASE']
     # Application DBs
-    objects['application database'] = filter(lambda row: row.kind == 'APPLICATION' , dbs)
+    objects['application database'] = [ row for row in dbs if row.kind == 'APPLICATION' ]
     shared_dbs = set([row.name for row in objects['shared database']])
     application_dbs = set([row.name for row in objects['application database']])
     ignore_dbs = shared_dbs | application_dbs
 
     # Special Consideration Stage
-    objects['internal stage'] = filter(lambda row: row.type == 'INTERNAL' , objects['stage'])
-    objects['external stage'] = filter(lambda row: row.type == 'EXTERNAL' , objects['stage'])
+    objects['internal stage'] = [ row for row in  objects['stage'] if row.type == 'INTERNAL']
+    objects['external stage'] = [ row for row in  objects['stage'] if row.type == 'EXTERNAL']
 
     # Special Consideration: Information Schema Views
-    objects['view'] = filter(lambda row: row.schema_name != 'INFORMATION_SCHEMA' , objects['view'])
+    objects['view'] = [ row for row in  objects['view'] if row.schema_name != 'INFORMATION_SCHEMA']
     # Special Consideration: View
-    objects['materialized view'] = filter(lambda row: row.is_materialized == 'true' , objects['view'])
-    objects['view'] = filter(lambda row: row.is_materialized == 'false' , objects['view'])
+    objects['materialized view'] = [ row for row in  objects['view'] if row.is_materialized == 'true']
+    objects['view'] = [ row for row in  objects['view'] if row.is_materialized == 'false']
 
 
     # Special Consideration: xtab
-    objects['external table'] =  filter(lambda row: row.is_external == 'Y' , objects['table'])
-    objects['table'] = filter(lambda row: row.is_external == 'N' , objects['table'])
+    objects['external table'] =  [ row for row in  objects['table'] if row.is_external == 'Y']
+    objects['table'] = [ row for row in  objects['table'] if row.is_external == 'N']
 
     # Special Consideration: Objects where db/container is a shared/app db
     if method == 'seq':
@@ -186,7 +186,7 @@ def filter_function(obj_type:str, obj_rows:list, ignore_dbs:set, ignore_pattern 
     
     if identifier:
         filter_fn = lambda row: getattr(row,identifier) not in ignore_dbs and not re.match(ignore_pattern,getattr(row,identifier))
-        return obj_type,filter(filter_fn, obj_rows)
+        return obj_type,[row for row in obj_rows if filter_fn(row)]
     return obj_type,obj_rows
     
 
