@@ -68,7 +68,7 @@ def filter_objects(state:ControlState, objects:dict[str,pd.DataFrame], method:st
     objects['external stage'] = filter(lambda row: row.type == 'EXTERNAL' , objects['stage'])
 
     # Special Consideration: Information Schema Views
-    objects['view'] = filter(lambda row: row.schema != 'INFORMATION_SCHEMA' , objects['view'])
+    objects['view'] = filter(lambda row: row.schema_name != 'INFORMATION_SCHEMA' , objects['view'])
     # Special Consideration: View
     objects['materialized view'] = filter(lambda row: row.is_materialized == 'true' , objects['view'])
     objects['view'] = filter(lambda row: row.is_materialized == 'false' , objects['view'])
