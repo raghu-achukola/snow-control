@@ -71,6 +71,7 @@ def plan(state:ControlState, account, roles_to_plan, from_cache = True, method =
     # log_snowplan(state,account)
 
 def plan_single_role(state:ControlState, objects,role_grants,profiles,role,role_config):
+    state.print(f'Planning single role: {role}', verbosity_level=3)
     target_state_grants = set()
     associated_profiles = role_config['profiles']
 
@@ -79,7 +80,7 @@ def plan_single_role(state:ControlState, objects,role_grants,profiles,role,role_
         for profile_name, profile_parameters in assoc_prof.items():
             profile_config = profiles[profile_name]
             target_state_grants |= profile_to_grants(state,objects,profile_name,profile_config,**profile_parameters)
-    current_state_grants = role_grants.get(role)
+    current_state_grants = role_grants.get(role.upper(), {})
     revoke,ok,grant = venn(current_state_grants,target_state_grants)
     return {
         role: {

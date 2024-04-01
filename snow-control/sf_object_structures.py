@@ -58,7 +58,7 @@ def process_name(name:str, obj_type:str) -> str:
         main_name = main_name.replace(signature, f"{','.join(args)}")
     return name.replace(reg_match.groups(1)[0],main_name)
 
-def get_matching(objects:dict[str,pd.DataFrame], object_type:str, patterns:Iterable[str])-> set: 
+def get_matching(objects:dict[str,dict], object_type:str, patterns:Iterable[str])-> set: 
     """
         Find all objects of type {object_type} in the Snowflake account matching {patterns} 
         a list of regex patterns
@@ -73,7 +73,7 @@ def get_matching(objects:dict[str,pd.DataFrame], object_type:str, patterns:Itera
     generalized_object_type = 'stage' if object_type.endswith('stage') else object_type
     generalized_object_type = 'integration' if object_type.endswith('integration') else generalized_object_type
 
-    dataframe = objects[object_type].copy()
+    dictionary = objects[object_type]
     # Construct the filter clause for the regex match: the constructed full name
     # must match one of the patterns in the atomic group. As such: 
     #
@@ -86,26 +86,24 @@ def get_matching(objects:dict[str,pd.DataFrame], object_type:str, patterns:Itera
     # .
     # re.match('{pattern_n}', full_name)
     regexp_match = lambda name: object_matches_any(name,patterns)
-    dataframe = dataframe[dataframe['FULL_NAME'].apply(regexp_match)]
-    if object_type == 'view': 
-        dataframe = dataframe[dataframe['schema_name']!= 'INFORMATION_SCHEMA']
-    if len(dataframe): 
-        matches |= set(dataframe['FULL_NAME'])
+    matched = {k:v for k,v in dictionary.items() if regexp_match(k) and v.get('schema_name','')!= 'INFORMATION_SCHEMA'}
+    if len(matched): 
+        matches |= set(matched)
     return matches
 
 def object_matches_any(name:str,patterns:list):
     return any([re.match(pattern,name, re.IGNORECASE) for pattern in patterns]) 
 
-def get_futures(objects:dict[str,pd.DataFrame],object_type:str,patterns:Iterable[str]):
+def get_futures(objects:dict[str,dict],object_type:str,patterns:Iterable[str]):
     regexp_match = lambda name: any([re.match(pattern,name) for pattern in patterns])
     if object_type.lower() != 'schema':
-        dataframe = objects['schema'].copy()
-        dataframe = dataframe[dataframe['name']!='INFORMATION_SCHEMA']
+        spec_objects = objects['schema'].copy()
+        spec_objects = {k:v for k,v in spec_objects.items() if v.get('name','') != 'INFORMATION_SCHEMA'}
     else:
-        dataframe = objects['database'].copy()
-        dataframe = dataframe[dataframe['name']!='SNOWFLAKE']
-    dataframe = dataframe[dataframe['FULL_NAME'].apply(regexp_match)]
-    return set(dataframe['FULL_NAME'])
+        spec_objects = objects['database'].copy()
+        spec_objects = {k:v for k,v in spec_objects.items() if k != 'SNOWFLAKE'}
+    spec_objects = {k:v for k,v in spec_objects.items() if regexp_match(k)}
+    return set(spec_objects)
 
 def pluralize(word:str):
     if word: 
