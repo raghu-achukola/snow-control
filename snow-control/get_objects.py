@@ -38,7 +38,7 @@ def object_scan(state:ControlState, method = 'conc') -> dict:
         )
         panda = panda[panda['FULL_NAME'].apply(lambda name: not object_matches_any(name,state.ignore_objects))]
         
-        return (obj_type,panda)
+        return (obj_type,list(panda.itertuples()))
 
     if method == 'seq':
         for obj_type,full_name_columns in GET_FULL_NAME.items():
@@ -53,36 +53,36 @@ def object_scan(state:ControlState, method = 'conc') -> dict:
 
     return objects
 
-def filter_objects(state:ControlState, objects:dict[str,pd.DataFrame], method:str) -> dict[str,pd.DataFrame]:
+def filter_objects(state:ControlState, objects:dict[str,pd.DataFrame], method:str) -> dict[str,list]:
     dbs = objects['database']
     # Shared Databases
-    objects['shared database'] = dbs[dbs['kind']== 'IMPORTED DATABASE'].copy()
+    objects['shared database'] =  filter(lambda row: row.kind == 'IMPORTED DATABASE', dbs)
     # Application DBs
-    objects['application database'] = dbs[dbs['kind'] == 'APPLICATION'].copy()
-    shared_dbs = set(objects['shared database']['name'])
-    application_dbs = set(objects['application database']['name'])
+    objects['application database'] = filter(lambda row: row.kind == 'APPLICATION' , dbs)
+    shared_dbs = set([row.name for row in objects['shared database']])
+    application_dbs = set([row.name for row in objects['application database']])
     ignore_dbs = shared_dbs | application_dbs
 
     # Special Consideration Stage
-    objects['internal stage'] = objects['stage'][objects['stage']['type']=='INTERNAL'].copy()
-    objects['external stage'] = objects['stage'][objects['stage']['type']=='EXTERNAL'].copy()
+    objects['internal stage'] = filter(lambda row: row.type == 'INTERNAL' , objects['stage'])
+    objects['external stage'] = filter(lambda row: row.type == 'EXTERNAL' , objects['stage'])
 
     # Special Consideration: Information Schema Views
-    objects['view'] = objects['view'][objects['view']['schema_name']!='INFORMATION_SCHEMA'].copy()
+    objects['view'] = filter(lambda row: row.schema != 'INFORMATION_SCHEMA' , objects['view'])
     # Special Consideration: View
-    objects['materialized view'] = objects['view'][objects['view']['is_materialized']=='true'].copy()
-    objects['view'] = objects['view'][objects['view']['is_materialized']=='false'].copy()
+    objects['materialized view'] = filter(lambda row: row.is_materialized == 'true' , objects['view'])
+    objects['view'] = filter(lambda row: row.is_materialized == 'false' , objects['view'])
 
 
     # Special Consideration: xtab
-    objects['external table'] = objects['table'][objects['table']['is_external']=='Y'].copy()
-    objects['table'] = objects['table'][objects['table']['is_external']=='N'].copy()
+    objects['external table'] =  filter(lambda row: row.is_external == 'Y' , objects['table'])
+    objects['table'] = filter(lambda row: row.is_external == 'N' , objects['table'])
 
     # Special Consideration: Objects where db/container is a shared/app db
     if method == 'seq':
         return dict(
-            filter_function(obj_typ,object_df,ignore_dbs)
-            for obj_typ, object_df in objects.items() 
+            filter_function(obj_typ,object_rows,ignore_dbs)
+            for obj_typ, object_rows in objects.items() 
         )
     else:
         return { 
@@ -95,7 +95,7 @@ def filter_objects(state:ControlState, objects:dict[str,pd.DataFrame], method:st
         }
 
 
-def filter_function(obj_type:str, obj_df:pd.DataFrame, ignore_dbs:set, ignore_pattern =  r'.*_(DEV|QA|PROD)_[0-9]{1,5}') -> Tuple[str,pd.DataFrame]:
+def filter_function(obj_type:str, obj_rows:list, ignore_dbs:set, ignore_pattern =  r'.*_(DEV|QA|PROD)_[0-9]{1,5}') -> Tuple[str,pd.DataFrame]:
     identifier = 'database_name'
     if obj_type.lower() in FNCs:
         identifier = 'catalog_name'
@@ -105,9 +105,9 @@ def filter_function(obj_type:str, obj_df:pd.DataFrame, ignore_dbs:set, ignore_pa
         identifier = None
     
     if identifier:
-        filter = lambda db: db not in ignore_dbs and not re.match(ignore_pattern,db)
-        return obj_type,obj_df[obj_df[identifier].apply(filter)]
-    return obj_type,obj_df
+        filter_fn = lambda row: row.identifier not in ignore_dbs and not re.match(ignore_pattern,row)
+        return obj_type,filter(filter_fn, obj_rows)
+    return obj_type,obj_rows
     
 
 def save_cache(st:ControlState, objects:dict[str,pd.DataFrame]):
@@ -117,14 +117,8 @@ def save_cache(st:ControlState, objects:dict[str,pd.DataFrame]):
             {
                'local_cached_time': strftime("%Y-%m-%d %H:%M:%S",localtime()),
                'objects':{
-                   # wHy DoNt u UsE to_DiCt, because the stupid to_dict function 
-                   # isn't fucking json safe
-                   k:(
-                       json.loads(df.set_index('FULL_NAME',drop = True).to_json(orient='index'))
-                        if not df.empty 
-                        else {}
-                   )
-                   for k,df in objects.items()
+                   obj_typ:{row.FULL_NAME: row for row in rows}
+                   for obj_typ,rows in objects.items()
                }
             }, indent = 4
         )
