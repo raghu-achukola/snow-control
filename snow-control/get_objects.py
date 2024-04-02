@@ -48,7 +48,7 @@ def object_scan(state:ControlState, method = 'conc') -> dict:
     def get_grants_to_role(role:str) -> set:
         current_state_grants = get_current_grants_to_role(role) | get_future_grants_to_role(role)
 
-        filter_fn = lambda db: db not in objects['shared database']
+        filter_fn = lambda db: db not in {row.name for row in objects['shared database']}
         current_state_grants = {
             (priv,typ,full_name)
             for priv,typ,full_name in current_state_grants
