@@ -78,21 +78,30 @@ def plan(
             for user, config in user_configs.items():
                 user_plan |= plan_single_user(state, user, config)
     else:
-        role_plans, user_plans = {}, {}
-        role_plans = state.executor.map(
-            plan_single_role,
-            repeat(state),
-            repeat(objects),
-            repeat(role_profiles),
-            *zip(*role_configs.items()),
-        )
-        if plan_users:
-            user_plans = state.executor.map(
-                plan_single_user, repeat(state), *zip(*user_configs.items())
+        role_plans, user_plans = [], []
+        role_plans = list(
+            state.executor.map(
+                plan_single_role,
+                repeat(state),
+                repeat(objects),
+                repeat(role_profiles),
+                *zip(*role_configs.items()),
             )
-        if role_plan:
+        )
+
+        if plan_users:
+            user_plans = list(
+                state.executor.map(
+                    plan_single_user, repeat(state), *zip(*user_configs.items())
+                )
+            )
+
+        if role_plans:
             role_plan = reduce(lambda x, y: x | y, role_plans)
+
+        if user_plans:
             user_plan = reduce(lambda x, y: x | y, user_plans, {})
+
     write_out_snowplan(account, role_plan, user_plan, plan_id=PLAN_ID)
     # log_snowplan(state,account)
 
@@ -279,6 +288,11 @@ def get_current_users_roles(state: ControlState, user: str) -> set:
             RETRIEVE_GRANTS_TO_USER_QUERY.format(qid=qid)
         ).fetchall()
     )
+
+    # Removes grants not associated with a role from system actions like create WORKSPACE
+    # These grants look like: USER$<USER NAME>
+    roles_granted = set(list(filter(None, roles_granted)))
+
     return roles_granted
 
 

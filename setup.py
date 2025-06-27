@@ -13,7 +13,6 @@ setup(
     ],
     install_requires=[
         "asn1crypto==1.5.1",
-        "certifi==2025.4.26",
         "cffi==1.17.1",
         "charset-normalizer==2.1.1",
         "colorama==0.4.6",
